@@ -1581,28 +1581,40 @@ const MY_GAMES = [
   // { placeId: "YOUR_PLACE_ID", label: "Game Name", color: "#00ccff" },
 ];
 
-const PROXY = "https://corsproxy.io/?";
 let liveData = {};
+
+// Try multiple CORS proxies in order until one works
+async function proxyFetch(url) {
+  const proxies = [
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    u => `https://thingproxy.freeboard.io/fetch/${u}`,
+  ];
+  for (const make of proxies) {
+    try {
+      const res = await fetch(make(url));
+      if (!res.ok) continue;
+      return await res.json();
+    } catch(e) { continue; }
+  }
+  throw new Error("All proxies failed");
+}
 
 async function fetchCCU(placeId) {
   // Step 1: place -> universe
-  const uRes = await fetch(PROXY + encodeURIComponent(`https://apis.roblox.com/universes/v1/places/${placeId}/universe`));
-  if (!uRes.ok) throw new Error("Bad place ID");
-  const uData = await uRes.json();
+  const uData = await proxyFetch(`https://apis.roblox.com/universes/v1/places/${placeId}/universe`);
   const uid = uData.universeId;
   if (!uid) throw new Error("No universe");
 
   // Step 2: game details (CCU, visits, etc.)
-  const gRes = await fetch(PROXY + encodeURIComponent(`https://games.roblox.com/v1/games?universeIds=${uid}`));
-  const gData = await gRes.json();
+  const gData = await proxyFetch(`https://games.roblox.com/v1/games?universeIds=${uid}`);
   const game = gData.data && gData.data[0];
   if (!game) throw new Error("No game data");
 
   // Step 3: thumbnail
   let thumb = null;
   try {
-    const tRes = await fetch(PROXY + encodeURIComponent(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${uid}&size=150x150&format=Png&isCircular=false`));
-    const tData = await tRes.json();
+    const tData = await proxyFetch(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${uid}&size=150x150&format=Png&isCircular=false`);
     thumb = tData.data && tData.data[0] && tData.data[0].imageUrl;
   } catch(e) {}
 
